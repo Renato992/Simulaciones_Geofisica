@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Simulador de Prospección Sísmica</title>
+<meta name="description" content="Simulador interactivo de adquisición sísmica (refracción, reflexión y MASW) con ruido realista y exportación SEG-Y / SEG-2.">
+<link rel="stylesheet" href="css/estilos.css">
+</head>
+<body>
+<header class="cabecera">
+  <div class="titulo">
+    <svg viewBox="0 0 32 32" width="26" height="26" aria-hidden="true"><path d="M1 16h5l2-7 3 14 3-18 3 22 3-15 2 6 2-2h7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/></svg>
+    <div>
+      <h1>Simulador de Prospección Sísmica</h1>
+      <p>Adquisición sintética de campo · refracción · reflexión · MASW</p>
+    </div>
+  </div>
+  <div class="acciones-cabecera">
+    <label class="preset">Tipo de estudio
+      <select id="preset">
+        <option value="refraccion">Refracción sísmica (P)</option>
+        <option value="reflexion">Reflexión sísmica (CMP)</option>
+        <option value="masw">MASW (ondas superficiales)</option>
+      </select>
+    </label>
+    <button id="btnNuevaRealizacion" class="btn" title="Cambia la semilla aleatoria: nuevo ruido, estáticas y trazas defectuosas">🎲 Nueva realización</button>
+    <a class="btn btn-sec" href="../index.html" title="Volver al índice de simulaciones">Índice</a>
+  </div>
+</header>
+
+<div class="app">
+  <!-- ================= PANEL LATERAL DE PARÁMETROS ================= -->
+  <aside class="lateral" id="lateral">
+    <details open>
+      <summary>Modelo geológico (capas)</summary>
+      <p class="ayuda">Capas horizontales sobre un semiespacio. La última fila es el semiespacio (espesor infinito).</p>
+      <div class="tabla-capas-env">
+        <table class="tabla-capas" id="tablaCapas">
+          <thead><tr><th>#</th><th title="Espesor (m)">h (m)</th><th title="Velocidad de onda P (m/s)">Vp</th><th title="Velocidad de onda S (m/s)">Vs</th><th title="Densidad (g/cm³)">ρ</th><th title="Factor de calidad (atenuación)">Q</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="fila-botones">
+        <button class="btn btn-peq" id="btnAgregarCapa">+ Capa</button>
+        <button class="btn btn-peq btn-sec" id="btnModeloAleatorio" title="Genera un modelo geológico aleatorio coherente con el tipo de estudio">Modelo aleatorio</button>
+      </div>
+    </details>
+
+    <details open>
+      <summary>Geometría del tendido</summary>
+      <label>Tipo de tendido
+        <select data-p="tendido">
+          <option value="fijo">Fijo (todos los disparos al mismo tendido)</option>
+          <option value="rodante">Rodante (roll-along, el tendido se mueve con la fuente)</option>
+        </select>
+      </label>
+      <div class="rejilla2">
+        <label>Nº de canales <input type="number" data-p="nch" min="2" max="480" step="1"></label>
+        <label>Espaciado Δx (m) <input type="number" data-p="dx" min="0.1" step="0.1"></label>
+      </div>
+      <div data-mostrar="tendido=fijo">
+        <label>Posición del 1er geófono (m) <input type="number" data-p="x1" step="0.5"></label>
+        <label>Posición de los disparos
+          <select data-p="disparos">
+            <option value="estandar">Estándar de refracción (extremos, internos y externos)</option>
+            <option value="lista">Lista personalizada</option>
+          </select>
+        </label>
+        <div class="rejilla2" data-mostrar="disparos=estandar">
+          <label>Disparos internos <input type="number" data-p="nInternos" min="0" max="20" step="1"></label>
+          <label>Offset externo (m) <input type="number" data-p="offExt" min="0" step="1" title="0 = sin disparos externos"></label>
+        </div>
+        <label data-mostrar="disparos=lista">Posiciones x (m), separadas por comas <input type="text" data-p="listaDisparos" placeholder="-10, 57.5, 125"></label>
+      </div>
+      <div data-mostrar="tendido=rodante">
+        <label>Configuración
+          <select data-p="configuracion">
+            <option value="split">Split-spread (simétrico)</option>
+            <option value="endon">End-on (lateral)</option>
+          </select>
+        </label>
+        <div class="rejilla2">
+          <label>Offset mínimo (m) <input type="number" data-p="offMin" min="0" step="0.5"></label>
+          <label>Nº de disparos <input type="number" data-p="nDisparos" min="1" max="400" step="1"></label>
+          <label>Intervalo de disparo (m) <input type="number" data-p="dxDisparo" min="0.5" step="0.5"></label>
+          <label>x del 1er disparo (m) <input type="number" data-p="xDisparo0" step="1"></label>
+        </div>
+      </div>
+    </details>
+
+    <details open>
+      <summary>Fuente sísmica</summary>
+      <label>Tipo de fuente
+        <select data-p="tipoFuente">
+          <option value="martillo">Martillo (mandarria) sobre placa</option>
+          <option value="peso">Caída de peso (PEG / acelerado)</option>
+          <option value="escopeta">Escopeta sísmica (cartucho)</option>
+          <option value="explosivo">Explosivo en pozo</option>
+          <option value="vibro">Vibrador (vibroseis)</option>
+        </select>
+      </label>
+      <div class="rejilla2">
+        <label data-mostrar="tipoFuente!=vibro">Frec. dominante (Hz) <input type="number" data-p="fp" min="2" max="1000" step="1"></label>
+        <label data-mostrar="tipoFuente=vibro">Barrido f1 (Hz) <input type="number" data-p="f1" min="1" step="1"></label>
+        <label data-mostrar="tipoFuente=vibro">Barrido f2 (Hz) <input type="number" data-p="f2" min="2" step="1"></label>
+        <label>Fase de la ondícula
+          <select data-p="fase"><option value="min">Mínima (impulsiva)</option><option value="cero">Cero (simétrica)</option></select>
+        </label>
+        <label title="Golpes sumados por disparo: el ruido aleatorio baja √N">Apilamiento vertical <input type="number" data-p="stacks" min="1" max="64" step="1"></label>
+      </div>
+    </details>
+
+    <details>
+      <summary>Receptores y registro</summary>
+      <div class="rejilla2">
+        <label>Geófono f0 (Hz)
+          <select data-p="f0" data-num>
+            <option>2</option><option>4.5</option><option>10</option><option>14</option><option>28</option><option>40</option><option>100</option>
+          </select>
+        </label>
+        <label>Amortiguamiento ζ <input type="number" data-p="zeta" min="0.1" max="2" step="0.05"></label>
+        <label>Intervalo de muestreo
+          <select data-p="dtms" data-num>
+            <option value="0.03125">0.03125 ms (32 kHz)</option><option value="0.0625">0.0625 ms (16 kHz)</option>
+            <option value="0.125">0.125 ms (8 kHz)</option><option value="0.25">0.25 ms (4 kHz)</option>
+            <option value="0.5">0.5 ms (2 kHz)</option><option value="1">1 ms (1 kHz)</option>
+            <option value="2">2 ms (500 Hz)</option><option value="4">4 ms (250 Hz)</option>
+          </select>
+        </label>
+        <label>Longitud de registro (ms) <input type="number" data-p="trec" min="10" max="16000" step="10"></label>
+        <label>Pre-disparo (ms) <input type="number" data-p="pretrig" min="0" max="500" step="1"></label>
+      </div>
+    </details>
+
+    <details>
+      <summary>Ondas presentes en el registro</summary>
+      <div class="checks">
+        <label class="chk"><input type="checkbox" data-p="evDirecta"> Onda directa</label>
+        <label class="chk"><input type="checkbox" data-p="evRefractadas"> Refractadas (cónicas)</label>
+        <label class="chk"><input type="checkbox" data-p="evReflexiones"> Reflexiones primarias</label>
+        <label class="chk"><input type="checkbox" data-p="evMultiples"> Múltiples de superficie</label>
+        <label class="chk"><input type="checkbox" data-p="evGroundRoll"> Ground roll (Rayleigh)</label>
+        <label class="chk"><input type="checkbox" data-p="evAerea"> Onda aérea (343 m/s)</label>
+      </div>
+      <div class="rejilla2">
+        <label>Amplitud ground roll <input type="number" data-p="ampGR" min="0" step="0.1"></label>
+        <label>Frec. ground roll (Hz) <input type="number" data-p="fgr" min="1" step="1"></label>
+        <label>Amplitud onda aérea <input type="number" data-p="ampAerea" min="0" step="0.1"></label>
+      </div>
+    </details>
+
+    <details>
+      <summary>Ruido y realismo de campo</summary>
+      <label class="deslizador">Ruido ambiental aleatorio <span data-val="ruidoAmb"></span><input type="range" data-p="ruidoAmb" min="0" max="100" step="1"></label>
+      <label class="deslizador">Inducción de red eléctrica <span data-val="ruidoRed"></span><input type="range" data-p="ruidoRed" min="0" max="100" step="1"></label>
+      <label>Frecuencia de red
+        <select data-p="freqRed" data-num><option value="60">60 Hz (América)</option><option value="50">50 Hz (Europa, Perú, Chile…)</option></select>
+      </label>
+      <label class="deslizador">Ruido cultural transitorio <span data-val="ruidoTrans"></span><input type="range" data-p="ruidoTrans" min="0" max="100" step="1"></label>
+      <div class="rejilla2">
+        <label title="Desviación típica de los retardos por la capa meteorizada irregular">Estáticas σ (ms) <input type="number" data-p="estaticas" min="0" step="0.1"></label>
+        <label title="Error del disparador (geófono de tiempo cero / interruptor de martillo)">Jitter disparo σ (ms) <input type="number" data-p="jitter" min="0" step="0.05"></label>
+        <label>Trazas muertas (%) <input type="number" data-p="probMuerta" min="0" max="100" step="0.5"></label>
+        <label>Polaridad invertida (%) <input type="number" data-p="probInvertida" min="0" max="100" step="0.5"></label>
+        <label title="Variación lognormal de la ganancia por mal acople geófono-suelo">Variación de acople (%) <input type="number" data-p="varAcople" min="0" max="200" step="1"></label>
+        <label>Picos eléctricos (% trazas) <input type="number" data-p="probPicos" min="0" max="100" step="0.5"></label>
+      </div>
+      <label>Semilla aleatoria <input type="number" data-p="semilla" min="0" step="1"></label>
+    </details>
+
+    <details open>
+      <summary>Exportar datos</summary>
+      <div class="exportar">
+        <button class="btn" id="expSEGY" title="Todos los disparos en un solo archivo SEG-Y rev1 (IEEE float)">SEG-Y (todos)</button>
+        <button class="btn" id="expSEG2" title="Un archivo SEG-2 por disparo, empaquetados en ZIP">SEG-2 (.zip)</button>
+        <button class="btn btn-sec" id="expCSV" title="Disparo actual como tabla (tiempo × trazas)">CSV disparo</button>
+        <button class="btn btn-sec" id="expGeom">Geometría CSV</button>
+        <button class="btn btn-sec" id="expPicks" title="Tiempos picados + tiempos verdaderos del modelo">Picks CSV</button>
+        <button class="btn btn-sec" id="expPNG">Imagen PNG</button>
+      </div>
+      <div class="exportar">
+        <button class="btn btn-sec" id="expProyecto" title="Guarda todos los parámetros y el modelo">Guardar proyecto</button>
+        <label class="btn btn-sec" title="Carga un proyecto .json">Cargar proyecto<input type="file" id="impProyecto" accept=".json,application/json" hidden></label>
+      </div>
+      <div class="progreso" id="progreso" hidden><div></div></div>
+    </details>
+  </aside>
+
+  <!-- ================= ÁREA PRINCIPAL ================= -->
+  <main class="principal">
+    <section class="panel panel-registro">
+      <div class="barra">
+        <div class="grupo">
+          <button class="btn btn-icono" id="dispAnt" title="Disparo anterior">◀</button>
+          <select id="selDisparo" title="Disparo mostrado"></select>
+          <button class="btn btn-icono" id="dispSig" title="Disparo siguiente">▶</button>
+        </div>
+        <div class="grupo">
+          <select id="visModo" title="Modo de visualización">
+            <option value="wva">Wiggle + área</option>
+            <option value="w">Wiggle</option>
+            <option value="dg">Densidad gris</option>
+            <option value="drb">Densidad rojo-azul</option>
+          </select>
+          <select id="visGanancia" title="Ganancia de visualización (no altera los datos exportados)">
+            <option value="agc">AGC</option>
+            <option value="traza">Normalizar traza</option>
+            <option value="global">Sin ganancia (amplitud real)</option>
+            <option value="t2">Ganancia t²</option>
+          </select>
+          <label class="mini">AGC <input type="number" id="visAgc" value="40" min="2" step="5"> ms</label>
+          <label class="mini">Escala <input type="range" id="visEscala" min="0.1" max="6" step="0.1" value="1.2"></label>
+          <label class="mini">t máx <input type="number" id="visTmax" step="10" min="5"> ms</label>
+        </div>
+        <div class="grupo">
+          <label class="chk mini"><input type="checkbox" id="visTeoricos"> Curvas teóricas</label>
+          <label class="chk mini"><input type="checkbox" id="visPrimeros"> 1er arribo real</label>
+          <label class="chk mini"><input type="checkbox" id="visPicks" checked> Picks</label>
+        </div>
+        <div class="grupo">
+          <button class="btn btn-peq btn-sec" id="btnPicado" aria-pressed="false" title="Clic: picar · Shift+clic: borrar · arrastre: picar varias trazas">✎ Picado manual</button>
+          <button class="btn btn-peq btn-sec" id="btnAutoPick" title="Picado automático (razón de energía modificada)">Auto-picar</button>
+          <button class="btn btn-peq btn-sec" id="btnAutoPickTodos" title="Auto-picar todos los disparos">Auto (todos)</button>
+          <button class="btn btn-peq btn-sec" id="btnBorrarPicks">Borrar picks</button>
+        </div>
+      </div>
+      <div class="leyenda" id="leyenda"></div>
+      <div class="lienzo-env" id="envRegistro"><canvas id="cvRegistro"></canvas></div>
+      <div class="estado" id="estado">Listo.</div>
+    </section>
+
+    <section class="fila-inferior">
+      <div class="panel">
+        <div class="barra"><strong>Modelo y trayectorias de rayos</strong><span class="ayuda-inline">Pase el cursor sobre una traza para ver sus rayos</span></div>
+        <div class="lienzo-env" id="envModelo"><canvas id="cvModelo"></canvas></div>
+      </div>
+      <div class="panel">
+        <div class="barra pestañas" role="tablist">
+          <button class="pestaña activa" data-tab="resumen">Resumen</button>
+          <button class="pestaña" data-tab="dromo">Dromocronas</button>
+          <button class="pestaña" data-tab="espectro">Espectro</button>
+          <button class="pestaña" data-tab="dispersion">Dispersión</button>
+          <button class="pestaña" data-tab="ondicula">Ondícula</button>
+        </div>
+        <div class="lienzo-env" id="envAnalisis"><canvas id="cvAnalisis" hidden></canvas><div id="resumen" class="resumen"></div></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script src="js/fisica.js"></script>
+<script src="js/exportar.js"></script>
+<script src="js/interfaz.js"></script>
+</body>
+</html>
